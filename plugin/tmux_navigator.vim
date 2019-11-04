@@ -23,7 +23,28 @@ if !get(g:, 'tmux_navigator_no_mappings', 0)
   nnoremap <silent> <c-\> :TmuxNavigatePrevious<cr>
 endif
 
-if empty($TMUX)
+if !empty($TMUX)
+  let s:tmux = $TMUX
+  let s:tmux_pane = $TMUX_PANE
+  let s:tmux_executable = (match(s:tmux, 'tmate') != -1 ? 'tmate' : 'tmux')
+  let s:TmuxSocket = split(s:tmux, ',')[0]
+  function! s:TmuxCommand(args)
+    let cmd = s:tmux_executable . ' -S ' . s:TmuxSocket . ' ' . a:args
+    return system(cmd)
+  endfunction
+elseif !empty($TMUX_SSH_VIM)
+  let s:tmux = $TMUX_SSH_VIM
+  let s:tmux_pane = $TMUX_SSH_VIM_PANE
+  let s:tmux_server = $TMUX_SSH_SERVER
+  let s:tmux_executable = empty($TMUX_SSH_EXECUTABLE)? (match(s:tmux, 'tmate') != -1 ? 'tmate' : 'tmux') : $TMUX_SSH_EXECUTABLE
+  let s:TmuxSocket = split(s:tmux, ',')[0]
+
+  function! s:TmuxCommand(args)
+    let cmd0 = s:tmux_executable . ' -S ' . s:TmuxSocket . ' ' . a:args
+    let cmd = printf('ssh %s "%s"', s:tmux_server, cmd0)
+    return system(cmd)
+  endfunction
+else
   command! TmuxNavigateLeft call s:VimNavigate('h')
   command! TmuxNavigateDown call s:VimNavigate('j')
   command! TmuxNavigateUp call s:VimNavigate('k')
@@ -46,22 +67,8 @@ if !exists("g:tmux_navigator_disable_when_zoomed")
   let g:tmux_navigator_disable_when_zoomed = 0
 endif
 
-function! s:TmuxOrTmateExecutable()
-  return (match($TMUX, 'tmate') != -1 ? 'tmate' : 'tmux')
-endfunction
-
 function! s:TmuxVimPaneIsZoomed()
   return s:TmuxCommand("display-message -p '#{window_zoomed_flag}'") == 1
-endfunction
-
-function! s:TmuxSocket()
-  " The socket path is the first value in the comma-separated list of $TMUX.
-  return split($TMUX, ',')[0]
-endfunction
-
-function! s:TmuxCommand(args)
-  let cmd = s:TmuxOrTmateExecutable() . ' -S ' . s:TmuxSocket() . ' ' . a:args
-  return system(cmd)
 endfunction
 
 function! s:TmuxNavigatorProcessList()
@@ -108,7 +115,7 @@ function! s:TmuxAwareNavigate(direction)
       catch /^Vim\%((\a\+)\)\=:E141/ " catches the no file name error
       endtry
     endif
-    let args = 'select-pane -t ' . shellescape($TMUX_PANE) . ' -' . tr(a:direction, 'phjkl', 'lLDUR')
+    let args = 'select-pane -t ' . shellescape(s:tmux_pane) . ' -' . tr(a:direction, 'phjkl', 'lLDUR')
     silent call s:TmuxCommand(args)
     if s:NeedsVitalityRedraw()
       redraw!
